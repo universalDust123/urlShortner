@@ -3,45 +3,71 @@ package com.satyam.urlshortener.service;
 import com.satyam.urlshortener.entity.UrlMapping;
 import com.satyam.urlshortener.repository.UrlMappingRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.CacheEvict;
+
+import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.Random;
 
 @Service
 public class UrlMappingService {
 
     private final UrlMappingRepository repository;
-    private final Random random = new Random();
 
     public UrlMappingService(UrlMappingRepository repository) {
         this.repository = repository;
     }
 
-    // Generate a short URL code
-    private String generateShortUrl() {
-        String chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        StringBuilder shortUrl = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            shortUrl.append(chars.charAt(random.nextInt(chars.length())));
-        }
-        return shortUrl.toString();
+    // Create a short URL with optional expiry
+    @CachePut(value = "shortUrls", key = "#result.shortUrl")
+    public UrlMapping createShortUrl(String originalUrl, LocalDateTime expiresAt) {
+
+        // 1️⃣ Set default expiry if not provided
+    if (expiresAt == null) {
+        expiresAt = LocalDateTime.now().plusDays(2); // default 10 days
     }
 
-    // Create a short URL
-    public UrlMapping createShortUrl(String originalUrl) {
-        String shortUrl;
-        do {
-            shortUrl = generateShortUrl();
-        } while (repository.findByShortUrl(shortUrl).isPresent());
+     if (originalUrl == null || originalUrl.isBlank()) {
+        throw new IllegalArgumentException("Original URL must not be null or empty");
+    }
+       String code;
+    do {
+        code = generateShortCode();
+    } while (repository.findByShortUrl(code).isPresent());
 
-        UrlMapping mapping = new UrlMapping();
-        mapping.setOriginalUrl(originalUrl);
-        mapping.setShortUrl(shortUrl);
-        return repository.save(mapping);
+    UrlMapping mapping = new UrlMapping();
+    mapping.setOriginalUrl(originalUrl);
+    mapping.setShortUrl(code);
+    mapping.setExpiresAt(expiresAt);
+
+    return repository.save(mapping);
     }
 
-    // Retrieve original URL
+     // Get original URL from cache or DB, increment click count
+    @Cacheable(value = "shortUrls", key = "#shortUrl")
+    @Transactional
     public Optional<UrlMapping> getOriginalUrl(String shortUrl) {
-        return repository.findByShortUrl(shortUrl);
+         return repository.findByShortUrl(shortUrl)
+            .filter(mapping ->
+                    mapping.getExpiresAt() == null ||
+                    mapping.getExpiresAt().isAfter(LocalDateTime.now())
+            )
+            .map(mapping -> {
+                mapping.setClickCount(mapping.getClickCount() + 1);
+                return mapping;
+            });
+    }
+
+     // Optional: Evict URL from cache
+    @CacheEvict(value = "shortUrls", key = "#shortUrl")
+    public void deleteShortUrl(String shortUrl) {
+        repository.findByShortUrl(shortUrl).ifPresent(repository::delete);
+    }
+
+    private String generateShortCode() {
+        return Long.toHexString(System.currentTimeMillis());
     }
 }

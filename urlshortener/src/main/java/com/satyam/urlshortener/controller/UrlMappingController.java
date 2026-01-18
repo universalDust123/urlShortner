@@ -1,11 +1,16 @@
 package com.satyam.urlshortener.controller;
 
+import com.satyam.urlshortener.dto.UrlRequestDto;
+import com.satyam.urlshortener.dto.UrlResponseDto;
 import com.satyam.urlshortener.entity.UrlMapping;
 import com.satyam.urlshortener.service.UrlMappingService;
+
+import jakarta.validation.Valid;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletResponse;
+// import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 @RestController
@@ -20,29 +25,27 @@ public class UrlMappingController {
 
     // Create short URL
     @PostMapping("/shorten")
-    public ResponseEntity<String> shortenUrl(@RequestParam String originalUrl) {
-        UrlMapping mapping = service.createShortUrl(originalUrl);
-        return ResponseEntity.ok("Short URL: http://localhost:9090/r/" + mapping.getShortUrl());
+    public ResponseEntity<UrlResponseDto> shortenUrl(
+            @Valid @RequestBody UrlRequestDto request) {
+
+        UrlMapping mapping = service.createShortUrl(request.getOriginalUrl(), request.getExpiresAt());
+
+        if (mapping == null) {
+            return ResponseEntity.status(500).body(new UrlResponseDto("Failed to create short URL"));
+        }
+
+        return ResponseEntity.ok(
+                new UrlResponseDto("http://localhost:9090/r/" + mapping.getShortUrl()));
     }
 
     // Redirect to original URL
     @GetMapping("/r/{shortUrl}")
-    public void redirectToOriginal(@PathVariable String shortUrl, HttpServletResponse response) throws IOException {
-        service.getOriginalUrl(shortUrl).ifPresentOrElse(
-                mapping -> {
-                    try {
-                        response.sendRedirect(mapping.getOriginalUrl());
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                },
-                () -> {
-                    try {
-                        response.sendError(HttpServletResponse.SC_NOT_FOUND, "URL not found");
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-        );
+    public ResponseEntity<Object> redirectToOriginal(@PathVariable String shortUrl)
+            throws IOException {
+        return service.getOriginalUrl(shortUrl)
+                .map(mapping -> ResponseEntity.status(302)
+                        .header("Location", mapping.getOriginalUrl())
+                        .build())
+                .orElse(ResponseEntity.status(410).body("Link expired or not found"));
     }
 }
