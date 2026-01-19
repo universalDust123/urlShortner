@@ -40,12 +40,21 @@ public class UrlMappingController {
 
     // Redirect to original URL
     @GetMapping("/r/{shortUrl}")
-    public ResponseEntity<Object> redirectToOriginal(@PathVariable String shortUrl)
+    public ResponseEntity<Void> redirectToOriginal(@PathVariable String shortUrl)
             throws IOException {
-        return service.getOriginalUrl(shortUrl)
-                .map(mapping -> ResponseEntity.status(302)
-                        .header("Location", mapping.getOriginalUrl())
-                        .build())
-                .orElse(ResponseEntity.status(410).body("Link expired or not found"));
+        // return service.getOriginalUrl(shortUrl)
+        //         .map(mapping -> ResponseEntity.status(302)
+        //                 .header("Location", mapping.getOriginalUrl())
+        //                 .build())
+        //         .orElse(ResponseEntity.status(410).body("Link expired or not found"));
+         String originalUrl = service.getOriginalUrl(shortUrl);
+
+    if (originalUrl == null) {
+        return ResponseEntity.notFound().build();
+    }
+
+    return ResponseEntity.status(302)
+            .header("Location", originalUrl)
+            .build();
     }
 }
