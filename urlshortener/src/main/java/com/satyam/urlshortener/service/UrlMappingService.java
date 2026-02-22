@@ -1,5 +1,7 @@
 package com.satyam.urlshortener.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.satyam.urlshortener.entity.UrlMapping;
 import com.satyam.urlshortener.repository.UrlMappingRepository;
 import org.springframework.stereotype.Service;
@@ -16,7 +18,8 @@ import java.time.LocalDateTime;
 public class UrlMappingService {
 
     private final UrlMappingRepository repository;
-
+    private static final Logger logger =
+            LoggerFactory.getLogger(UrlMappingService.class);
     public UrlMappingService(UrlMappingRepository repository) {
         this.repository = repository;
     }
@@ -42,7 +45,7 @@ public class UrlMappingService {
         mapping.setOriginalUrl(originalUrl);
         mapping.setShortUrl(code);
         mapping.setExpiresAt(expiresAt);
-
+        logger.info("Created short URL mapping for original URL: {}", mapping);
         return repository.save(mapping);
     }
 
